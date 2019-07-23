@@ -255,6 +255,8 @@ def main():
                         help='Toggle on Issue migration.')
     parser.add_argument('--releases', '-r', action="store_true",
                         help='Toggle on Release migration.')
+    parser.add_argument('--numbers', '-n', type=str,
+                        help="Comma separated numbers of specific issues to migrate (unspecified -> move all issues)")
     args = parser.parse_args()
 
     destination_repo = args.destination_repo
@@ -321,6 +323,10 @@ def main():
 
     if args.issues:
         issues = download_issues(source_root, source_repo, source_credentials)
+        if args.numbers:
+            numbers = map(int, args.numbers.split(','))
+            issues = filter(lambda i : int(i["number"]) in numbers, issues)
+
         if issues:
             sameInstall = False
             if (args.sourceRoot == args.destinationRoot):
