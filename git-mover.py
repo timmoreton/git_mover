@@ -139,8 +139,15 @@ def main():
     parser.add_argument('--destinationRoot', '-dr', nargs='?', default='https://api.github.com', type=str,
                         help='The GitHub domain to migrate to. Defaults to https://www.github.com. For GitHub enterprise customers, enter the domain for your GitHub installation.')
     parser.add_argument('--numbers', '-n', type=str,
-                        help="Comma separated numbers of specific issues to migrate (unspecified -> move all issues)")
+                        help="Comma separated numbers of specific issues to migrate (or explicitly pass --allIssues)")
+    parser.add_argument('--allIssues', '-a', action="store_true",
+                         help='Toggle on Release migration.')
     args = parser.parse_args()
+
+    if not args.allIssues and not args.numbers:
+        sys.stderr.write(
+            'Please specify --allIssues or specific issues to migrate with --numbers\n')
+        quit()
 
     destination_repo = args.destination_repo
     source_repo = args.source_repo
