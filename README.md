@@ -1,7 +1,5 @@
 # GitMover
-A Python script to migrate milestones, labels, issues and releases between repositories.
-
-There was once no easy way to migrate your team's collaborative work (Milestones, Labels, Issues) to another repository. This was especially thorny for teams moving a project into GitHub Enterprise, or open sourcing an existing project by moving it out of GitHub Enterprise. This is a tool to help that process.
+A Python script to migrate GitHub issues between repositories. It supports copying between private and public repos, handles pagination of API responses for repos with many issues, and attempts to preserve labels.
 
 ## Dependencies
 GitMover is just a Python script. You'll need `requests`, `argparse` and a few
@@ -16,8 +14,9 @@ pip install -r requirements.txt
 $ git-mover.py [-h] [--destinationToken [DESTINATIONTOKEN]]
                     [--destinationUserName [DESTINATIONUSERNAME]]
                     [--sourceRoot [SOURCEROOT]]
-                    [--destinationRoot [DESTINATIONROOT]] [--milestones]
-                    [--labels] [--issues]
+                    [--destinationRoot [DESTINATIONROOT]]
+                    [--numbers NUMBERS]
+                    [--allIssues]
                     user_name token source_repo destination_repo
 ```
 
@@ -25,28 +24,24 @@ For authentication, GitMover uses a personal access token, which can be generate
 
 ### Positional Arguments
   `user_name`: Your GitHub (public or enterprise) username: name@email.com
-  
+
   `token`: Your GitHub (public or enterprise) personal access token
-  
+
   `source_repo`: the team and repo to migrate from: `<team_name>/<repo_name>`
-  
+
   `destination_repo`: the team and repo to migrate to: `<team_name>/<repo_name>`
-  
+
 ### Optional Arguments
   `-h, --help`: show this help message and exit
-  
-  `--sourceRoot [SOURCEROOT], -sr [SOURCEROOT]`: The GitHub domain to migrate from. Defaults to https://www.github.com. For GitHub enterprise customers, enter the domain for your GitHub installation.
-  
-  `--destinationRoot [DESTINATIONROOT], -dr [DESTINATIONROOT]`: The GitHub domain to migrate to. Defaults to https://www.github.com. For GitHub enterprise customers, enter the domain for your GitHub installation.
-  
-  `--destinationToken [DESTINATIONTOKEN], -dt [DESTINATIONTOKEN]`: Your personal access token for the destination account, if you are migrating between different GitHub installations.
-  
-  `--destinationUserName [DESTINATIONUSERNAME], -dun [DESTINATIONUSERNAME]`: Username (email address) for destination account, if you are migrating between different GitHub installations.
-  
-  `--milestones, -m`: Toggle on Milestone migration.
-  
-  `--labels, -l`: Toggle on Label migration.
-  
-  `--issues, -i`: Toggle on Issue migration.
 
-  `--releases, -r`: Toggle on Release migration.
+  `--sourceRoot [SOURCEROOT], -sr [SOURCEROOT]`: The GitHub domain to migrate from. Defaults to https://www.github.com. For GitHub enterprise customers, enter the domain for your GitHub installation.
+
+  `--destinationRoot [DESTINATIONROOT], -dr [DESTINATIONROOT]`: The GitHub domain to migrate to. Defaults to https://www.github.com. For GitHub enterprise customers, enter the domain for your GitHub installation.
+
+  `--destinationToken [DESTINATIONTOKEN], -dt [DESTINATIONTOKEN]`: Your personal access token for the destination account, if you are migrating between different GitHub installations.
+
+  `--destinationUserName [DESTINATIONUSERNAME], -dun [DESTINATIONUSERNAME]`: Username (email address) for destination account, if you are migrating between different GitHub installations.
+
+  `--numbers NUMBERS, -n NUMBERS`:  Comma separated numbers of specific issues to migrate (or explicitly pass `--allIssues`)
+
+  `--allIssues, -a`: Migrate all issues

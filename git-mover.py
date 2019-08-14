@@ -141,10 +141,10 @@ def main():
     parser.add_argument('--numbers', '-n', type=str,
                         help="Comma separated numbers of specific issues to migrate (or explicitly pass --allIssues)")
     parser.add_argument('--allIssues', '-a', action="store_true",
-                         help='Toggle on Release migration.')
+                         help='Migrate all issues.')
     args = parser.parse_args()
 
-    if not args.allIssues and not args.numbers:
+    if bool(args.allIssues) == bool(args.numbers):
         sys.stderr.write(
             'Please specify --allIssues or specific issues to migrate with --numbers\n')
         quit()
