@@ -5,6 +5,7 @@ import requests
 import json
 import argparse
 import sys
+import re
 
 def check_res(r):
     """Test if a response object is valid"""
@@ -42,24 +43,6 @@ def post_req(url, data, credentials):
     return r
 
 
-def download_milestones(source_url, source, credentials):
-    """
-    INPUT:
-        source_url: the root url for the GitHub API
-        source: the team and repo '<team>/<repo>' to retrieve milestones from
-    OUTPUT: retrieved milestones sorted by their number if request was successful. False otherwise
-    """
-    url = source_url + "repos/" + source + "/milestones?filter=all"
-    r = get_req(url, credentials)
-    status = check_res(r)
-    if status:
-        # if the request succeeded, sort the retrieved milestones by their number
-        sorted_milestones = sorted(json.loads(
-            r.text), key=lambda k: k['number'])
-        return sorted_milestones
-    return False
-
-
 def download_issues(source_url, source, credentials):
     """
     INPUT:
@@ -67,127 +50,37 @@ def download_issues(source_url, source, credentials):
         source: the team and repo '<team>/<repo>' to retrieve issues from
     OUTPUT: retrieved issues sorted by their number if request was successful. False otherwise
     """
-    url = source_url + "repos/" + source + "/issues?filter=all"
-    r = get_req(url, credentials)
-    status = check_res(r)
-    if status:
-        # if the requests succeeded, sort the retireved issues by their number
-        sorted_issues = sorted(json.loads(r.text), key=lambda k: k['number'])
-        return sorted_issues
-    return False
+    issues = []
+    url = "%srepos/%s/issues?filter=all" % (source_url, source)
 
-
-def download_labels(source_url, source, credentials):
-    """
-    INPUT:
-        source_url: the root url for the GitHub API
-        source: the team and repo '<team>/<repo>' to retrieve labels from
-    OUTPUT: retrieved labels if request was successful. False otherwise
-    """
-    url = source_url + "repos/" + source + "/labels?filter=all"
-    r = get_req(url, credentials)
-    status = check_res(r)
-    if status:
-        return json.loads(r.text)
-    return False
-
-
-def download_releases(source_url, source, credentials):
-    """
-    INPUT:
-        source_url: the root url for the GitHub API
-        source: the team and repo '<team>/<repo>' to retrieve releases from
-    OUTPUT: retrieved releases if request was successful. False otherwise
-    """
-    url = source_url + "repos/" + source + "/releases"
-    r = get_req(url, credentials)
-    status = check_res(r)
-    if status:
-        return json.loads(r.text)
-    return False
-
-
-def create_milestones(milestones, destination_url, destination, credentials):
-    """Post milestones to GitHub
-    INPUT:
-        milestones: python list of dicts containing milestone info to be POSTED to GitHub
-        destination_url: the root url for the GitHub API
-        destination: the team and repo '<team>/<repo>' to post milestones to
-    OUTPUT: A dict of milestone numbering that maps from source milestone numbers to destination milestone numbers
-    """
-    url = destination_url + "repos/" + destination + "/milestones"
-    milestone_map = {}
-    for milestone in milestones:
-        # create a new milestone that includes only the attributes needed to create a new milestone
-        milestone_prime = {"title": milestone["title"], "state": milestone["state"],
-                           "description": milestone["description"], "due_on": milestone["due_on"]}
-        r = post_req(url, json.dumps(milestone_prime), credentials)
+    while True:
+        r = get_req(url, credentials)
         status = check_res(r)
-        if status:
-            # if the POST request succeeded, parse and store the new milestone returned from GitHub
-            returned_milestone = json.loads(r.text)
-            # map the original source milestone's number to the newly created milestone's number
-            milestone_map[milestone['number']] = returned_milestone['number']
-        else:
-            print(status)
-    return milestone_map
+        if not status:
+            break
+
+        # if the requests succeeded, sort the retireved issues by their number
+        issues_on_page = json.loads(r.text)
+        if not issues_on_page:
+            break
+
+        for i in issues_on_page:
+            issues.append(i)
+
+        # Find the next page
+        if not r.headers['Link']:
+            break
+
+        m = re.search('<([^>]*)>; rel="next"', r.headers['Link'])
+        if not m:
+            break
+
+        url = m.group(1)
+
+    return sorted(issues, key=lambda k: k['number'])
 
 
-def create_labels(labels, destination_url, destination, credentials):
-    """Post labels to GitHub
-    INPUT:
-        labels: python list of dicts containing label info to be POSTED to GitHub
-        destination_url: the root url for the GitHub API
-        destination: the team and repo '<team>/<repo>' to post labels to
-    OUTPUT: Null
-    """
-    url = destination_url + "repos/" + destination + "/labels?filter=all"
-    # download labels from the destination and pass them into dictionary of label names
-    check_labels = download_labels(destination_url, destination, credentials) or []
-    existing_labels = {}
-    for existing_label in check_labels:
-        existing_labels[existing_label["name"]] = existing_label
-    for label in labels:
-        # for every label that was downloaded from the source, check if it already exists in the source.
-        # If it does, don't add it.
-        if label["name"] not in existing_labels:
-            label_prime = {"name": label["name"], "color": label["color"]}
-            print("Migrating Label: " + label["name"])
-            r = post_req(url, json.dumps(label_prime), credentials)
-            check_res(r)
-
-
-def create_releases(releases, destination_url, destination, credentials):
-    """Post releases to GitHub
-    INPUT:
-        releases: python list of dicts containing release info to be POSTED to GitHub
-        destination_url: the root url for the GitHub API
-        destination: the team and repo '<team>/<repo>' to post releases to
-    OUTPUT: Null
-    """
-    url = destination_url + "repos/" + destination + "/releases"
-    # download releases from the destination and pass them into dictionary of
-    # release names
-    check_releases = download_releases(destination_url, destination, credentials) or []
-    existing_releases = {}
-    for existing_release in check_releases:
-        existing_releases[existing_release["name"]] = existing_release
-    for release in releases:
-        # for every release that was downloaded from the source, check if it
-        # already exists in the destination.
-        # If it does, don't add it.
-        if release["name"] not in existing_releases:
-            release_prime = {"tag_name": release["tag_name"],
-                    "target_commitish": release["target_commitish"],
-                    "name": release["name"],
-                    "body": release["body"],
-                    "prerelease": release["prerelease"]}
-            print("Migrating Release: " + release["name"])
-            r = post_req(url, json.dumps(release_prime), credentials)
-            check_res(r)
-
-
-def create_issues(issues, destination_url, destination, milestones, labels, milestone_map, credentials, sameInstall):
+def create_issues(issues, destination_url, destination, credentials, sameInstall):
     """Post issues to GitHub
     INPUT:
         issues: python list of dicts containing issue info to be POSTED to GitHub
@@ -205,15 +98,11 @@ def create_issues(issues, destination_url, destination, milestones, labels, mile
             assignee = issue["assignee"]["login"]
         issue_prime = {"title": issue["title"], "body": issue["body"],
                        "assignee": assignee, "state": issue["state"]}
-        # if milestones were migrated and the issue to be posted contains milestones
-        if milestones and "milestone" in issue and issue["milestone"] is not None:
-            # if the milestone associated with the issue is in the milestone map
-            if issue['milestone']['number'] in milestone_map:
-                # set the milestone value of the new issue to the updated number of the migrated milestone
-                issue_prime["milestone"] = milestone_map[issue["milestone"]["number"]]
+
         # if labels were migrated and the issue to be migrated contains labels
-        if labels and "labels" in issue:
-            issue_prime["labels"] = issue["labels"]
+        if "labels" in issue:
+            issue_prime["labels"] = map(lambda l : l["name"], issue["labels"])
+
         r = post_req(url, json.dumps(issue_prime), credentials)
         status = check_res(r)
         # if adding the issue failed
@@ -226,6 +115,8 @@ def create_issues(issues, destination_url, destination, milestones, labels, mile
                                  "\" does not exist in the destination repository. Issue added without assignee field.\n\n")
                 issue_prime.pop('assignee')
                 post_req(url, json.dumps(issue_prime), credentials)
+        else:
+            print issue["number"], "->", json.loads(r.text)["number"]
 
 
 def main():
@@ -247,14 +138,8 @@ def main():
                         help='The GitHub domain to migrate from. Defaults to https://www.github.com. For GitHub enterprise customers, enter the domain for your GitHub installation.')
     parser.add_argument('--destinationRoot', '-dr', nargs='?', default='https://api.github.com', type=str,
                         help='The GitHub domain to migrate to. Defaults to https://www.github.com. For GitHub enterprise customers, enter the domain for your GitHub installation.')
-    parser.add_argument('--milestones', '-m', action="store_true",
-                        help='Toggle on Milestone migration.')
-    parser.add_argument('--labels', '-l', action="store_true",
-                        help='Toggle on Label migration.')
-    parser.add_argument('--issues', '-i', action="store_true",
-                        help='Toggle on Issue migration.')
-    parser.add_argument('--releases', '-r', action="store_true",
-                        help='Toggle on Release migration.')
+    parser.add_argument('--numbers', '-n', type=str,
+                        help="Comma separated numbers of specific issues to migrate (unspecified -> move all issues)")
     args = parser.parse_args()
 
     destination_repo = args.destination_repo
@@ -286,66 +171,22 @@ def main():
     source_root = args.sourceRoot + '/'
     destination_root = args.destinationRoot + '/'
 
-    milestone_map = None
-
-    if args.milestones is False and args.labels is False and args.issues is False and args.releases is False:
-        args.milestones = True
-        args.labels = True
-        args.issues = True
-        args.releases = True
-
-    if args.milestones:
-        milestones = download_milestones(
-            source_root, source_repo, source_credentials)
-        if milestones:
-            milestone_map = create_milestones(
-                milestones, destination_root, destination_repo, destination_credentials)
-        elif milestones is False:
-            sys.stderr.write(
-                'ERROR: Milestones failed to be retrieved. Exiting...')
-            quit()
-        else:
-            print("No milestones found. None migrated")
-
-    if args.labels:
-        labels = download_labels(source_root, source_repo, source_credentials)
-        if labels:
-            create_labels(labels, destination_root,
-                          destination_repo, destination_credentials)
-        elif labels is False:
-            sys.stderr.write(
-                'ERROR: Labels failed to be retrieved. Exiting...')
-            quit()
-        else:
-            print("No Labels found. None migrated")
-
-    if args.issues:
-        issues = download_issues(source_root, source_repo, source_credentials)
-        if issues:
-            sameInstall = False
-            if (args.sourceRoot == args.destinationRoot):
-                sameInstall = True
-            create_issues(issues, destination_root, destination_repo, args.milestones,
-                          args.labels, milestone_map, destination_credentials, sameInstall)
-        elif issues is False:
-            sys.stderr.write(
-                'ERROR: Issues failed to be retrieved. Exiting...')
-            quit()
-        else:
-            print("No Issues found. None migrated")
-
-    if args.releases:
-        releases = download_releases(source_root, source_repo, source_credentials)
-        if releases:
-            create_releases(releases, destination_root, destination_repo,
-                    destination_credentials)
-        elif releases is False:
-            sys.stderr.write(
-                'ERROR: Releases failed to be retrieved. Exiting...')
-            quit()
-        else:
-            print("No ssues found. None migrated")
-
+    issues = download_issues(source_root, source_repo, source_credentials)
+    if args.numbers:
+        numbers = map(int, args.numbers.split(','))
+        issues = filter(lambda i : int(i["number"]) in numbers, issues)
+    if issues:
+        sameInstall = False
+        if (args.sourceRoot == args.destinationRoot):
+            sameInstall = True
+        create_issues(issues, destination_root, destination_repo,
+                      destination_credentials, sameInstall)
+    elif issues is False:
+        sys.stderr.write(
+            'ERROR: Issues failed to be retrieved. Exiting...')
+        quit()
+    else:
+        print("No Issues found. None migrated")
 
 
 if __name__ == "__main__":
